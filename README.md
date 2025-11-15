@@ -188,11 +188,61 @@ genres/{genreId}
   - createdAt: timestamp
 ```
 
+## Firebase Hosting 배포
+
+### 1. Firebase CLI 설치
+
+```bash
+npm install -g firebase-tools
+```
+
+### 2. Firebase 로그인
+
+```bash
+firebase login
+```
+
+브라우저가 열리면 Google 계정으로 로그인하세요.
+
+### 3. Firebase 프로젝트 초기화 (이미 완료됨)
+
+프로젝트에는 이미 `firebase.json`과 `.firebaserc` 파일이 포함되어 있습니다.
+
+### 4. 배포
+
+```bash
+firebase deploy --only hosting
+```
+
+### 5. 배포 확인
+
+배포가 완료되면 다음과 같은 URL이 표시됩니다:
+```
+Hosting URL: https://gptwriter-e194c.web.app
+또는
+https://gptwriter-e194c.firebaseapp.com
+```
+
+### 6. 자동 배포 설정 (선택사항)
+
+GitHub Actions를 사용하여 자동 배포를 설정할 수 있습니다. `.github/workflows/deploy.yml` 파일을 생성하여 설정하세요.
+
 ## 주의사항
 
 1. **Firebase 보안 규칙**: 프로덕션 환경에서는 보안 규칙을 더 엄격하게 설정하세요.
 2. **Gemini API 사용량**: API 사용량에 따라 비용이 발생할 수 있으니 주의하세요.
 3. **CORS 설정**: 로컬 개발 환경에서는 문제가 없지만, 배포 시 CORS 설정을 확인하세요.
+4. **API 키 보안**: 
+   - `firebase-config.js` 파일은 `.gitignore`에 포함되어 있어 **Git에는 커밋되지 않습니다**.
+   - 하지만 **Firebase Hosting에 배포할 때는 포함**됩니다 (배포된 파일은 누구나 접근 가능).
+   - **보안 강화 방법**: [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서 Gemini API 키의 "애플리케이션 제한사항"을 설정하세요:
+     1. API 키 선택 → "애플리케이션 제한사항" → "HTTP 리퍼러(웹사이트)" 선택
+     2. 다음 도메인 추가:
+        - `https://gptwriter-e194c.web.app/*`
+        - `https://gptwriter-e194c.firebaseapp.com/*`
+        - `http://localhost:*` (개발용)
+     3. 저장
+   - 이렇게 하면 지정된 도메인에서만 API 키를 사용할 수 있어 보안이 강화됩니다.
 
 ## 라이선스
 

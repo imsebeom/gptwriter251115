@@ -5,18 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>글쓰기 교육 웹 앱</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script type="module" src="js/app.js"></script>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div id="app" class="container mx-auto px-4 py-8">
+<body class="bg-gray-50 min-h-screen overflow-hidden">
+    <div id="app" class="h-screen flex flex-col">
         <!-- 로딩 화면 -->
-        <div id="loading" class="text-center py-20">
-            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p class="mt-4 text-gray-600">로딩 중...</p>
+        <div id="loading" class="flex items-center justify-center flex-1">
+            <div class="text-center">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p class="mt-4 text-gray-600">로딩 중...</p>
+            </div>
         </div>
 
         <!-- 로그인 화면 -->
-        <div id="login-screen" class="hidden max-w-md mx-auto mt-20">
+        <div id="login-screen" class="hidden flex items-center justify-center flex-1">
+            <div class="max-w-md w-full mx-4">
             <div class="bg-white rounded-lg shadow-lg p-8">
                 <h1 class="text-3xl font-bold text-center mb-8 text-blue-600">글쓰기 교육 앱</h1>
                 <div class="mb-6">
@@ -35,48 +39,53 @@
                     시작하기
                 </button>
             </div>
+            </div>
         </div>
 
         <!-- 메인 화면 -->
-        <div id="main-screen" class="hidden">
-            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-2xl font-bold text-gray-800">안녕하세요, <span id="user-name" class="text-blue-600"></span>님!</h2>
+        <div id="main-screen" class="hidden flex h-screen">
+            <!-- 왼쪽 사이드바 -->
+            <div class="w-64 bg-white shadow-lg flex flex-col">
+                <!-- 사용자 정보 -->
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-800 mb-1">
+                        <span id="user-name" class="text-blue-600"></span>님
+                    </h2>
+                    <p class="text-xs text-gray-500">안녕하세요!</p>
+                </div>
+
+                <!-- 네비게이션 -->
+                <nav class="flex-1 p-4 space-y-2">
+                    <button 
+                        id="nav-write" 
+                        class="nav-btn w-full text-left px-4 py-3 rounded-lg font-semibold transition-colors bg-blue-600 text-white"
+                    >
+                        ✍️ 글쓰기
+                    </button>
+                    <button 
+                        id="nav-gallery" 
+                        class="nav-btn w-full text-left px-4 py-3 rounded-lg font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    >
+                        🖼️ 갤러리
+                    </button>
+                    <!-- 관리자 버튼은 JavaScript로 동적 생성 -->
+                </nav>
+
+                <!-- 로그아웃 버튼 -->
+                <div class="p-4 border-t border-gray-200">
                     <button 
                         id="logout-btn" 
-                        class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                        class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm"
                     >
                         로그아웃
                     </button>
                 </div>
             </div>
 
-            <!-- 네비게이션 -->
-            <div class="bg-white rounded-lg shadow-lg p-4 mb-6">
-                <nav class="flex space-x-4">
-                    <button 
-                        id="nav-write" 
-                        class="nav-btn px-6 py-2 rounded-lg font-semibold transition-colors bg-blue-600 text-white"
-                    >
-                        글쓰기
-                    </button>
-                    <button 
-                        id="nav-gallery" 
-                        class="nav-btn px-6 py-2 rounded-lg font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    >
-                        갤러리
-                    </button>
-                    <button 
-                        id="nav-admin" 
-                        class="nav-btn px-6 py-2 rounded-lg font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    >
-                        관리자
-                    </button>
-                </nav>
+            <!-- 메인 콘텐츠 영역 -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <div id="content-area"></div>
             </div>
-
-            <!-- 콘텐츠 영역 -->
-            <div id="content-area"></div>
         </div>
     </div>
 </body>

@@ -1,6 +1,11 @@
 # Firebase 설정 파일 (API 키 포함)
 js/firebase-config.js
 
+# Firebase 배포 캐시
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
 # 운영체제 파일
 .DS_Store
 Thumbs.db

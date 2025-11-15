@@ -11,9 +11,14 @@ export const firebaseConfig = {
     appId: "YOUR_APP_ID"
 };
 
-// Gemini API 설정
-export const geminiConfig = {
-    apiKey: "YOUR_GEMINI_API_KEY", // Google AI Studio에서 발급받은 API 키
-    model: "gemini-2.0-flash"
+// OpenAI API 설정
+export const openaiConfig = {
+    apiKey: "YOUR_OPENAI_API_KEY", // OpenAI에서 발급받은 API 키
+    model: "gpt-4o-mini" // 또는 "gpt-4o", "gpt-3.5-turbo" 등
+};
+
+// 관리자 설정
+export const adminConfig = {
+    adminName: "임세범" // 관리자 이름 (로그인 시 입력하는 이름과 정확히 일치해야 함)
 };
 

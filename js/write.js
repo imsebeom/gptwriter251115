@@ -1,83 +1,116 @@
 import { getTopicsAndGenres, saveWriting, getUserName } from './firebase.js';
-import { getAICoaching } from './gemini.js';
+import { getAICoaching, sendChatMessage } from './openai.js';
 import { currentUser } from './app.js';
 
 export async function renderWriteScreen() {
     const contentArea = document.getElementById('content-area');
     
     contentArea.innerHTML = `
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <h2 class="text-2xl font-bold mb-6 text-gray-800">글쓰기</h2>
-            
-            <!-- 주제/장르 선택 -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">주제 또는 장르 선택</label>
-                <div class="flex space-x-4 mb-4">
-                    <button id="select-topic-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        주제 선택
-                    </button>
-                    <button id="select-genre-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                        장르 선택
-                    </button>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 왼쪽: 글쓰기 영역 -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">글쓰기</h2>
+                
+                <!-- 주제/장르 선택 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">주제 또는 장르 선택</label>
+                    <div class="flex space-x-4 mb-4">
+                        <button id="select-topic-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            주제 선택
+                        </button>
+                        <button id="select-genre-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                            장르 선택
+                        </button>
+                    </div>
+                    <div id="topic-genre-selection" class="hidden">
+                        <div id="topics-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4"></div>
+                        <div id="genres-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4 hidden"></div>
+                    </div>
+                    <div id="selected-item" class="mt-4 p-3 bg-blue-50 rounded-lg hidden">
+                        <span class="font-semibold">선택됨: </span>
+                        <span id="selected-item-name"></span>
+                    </div>
                 </div>
-                <div id="topic-genre-selection" class="hidden">
-                    <div id="topics-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4"></div>
-                    <div id="genres-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4 hidden"></div>
-                </div>
-                <div id="selected-item" class="mt-4 p-3 bg-blue-50 rounded-lg hidden">
-                    <span class="font-semibold">선택됨: </span>
-                    <span id="selected-item-name"></span>
+                
+                <!-- 글 작성 폼 -->
+                <div id="writing-form" class="hidden">
+                    <div class="mb-4">
+                        <label for="writing-title" class="block text-sm font-medium text-gray-700 mb-2">제목</label>
+                        <input 
+                            type="text" 
+                            id="writing-title" 
+                            placeholder="글의 제목을 입력하세요"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="writing-content" class="block text-sm font-medium text-gray-700 mb-2">내용</label>
+                        <textarea 
+                            id="writing-content" 
+                            rows="15"
+                            placeholder="여기에 글을 작성하세요..."
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="flex space-x-4">
+                        <button 
+                            id="save-writing-btn" 
+                            class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                            저장하기
+                        </button>
+                        <button 
+                            id="get-coaching-btn" 
+                            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                            AI 코칭 받기
+                        </button>
+                    </div>
                 </div>
             </div>
             
-            <!-- 글 작성 폼 -->
-            <div id="writing-form" class="hidden">
-                <div class="mb-4">
-                    <label for="writing-title" class="block text-sm font-medium text-gray-700 mb-2">제목</label>
-                    <input 
-                        type="text" 
-                        id="writing-title" 
-                        placeholder="글의 제목을 입력하세요"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+            <!-- 오른쪽: AI 코칭 채팅창 -->
+            <div class="bg-white rounded-lg shadow-lg flex flex-col" style="height: calc(100vh - 50px); min-height: 600px;">
+                <div class="p-4 border-b border-gray-200">
+                    <h3 class="text-xl font-bold text-purple-800">AI 코칭 채팅</h3>
+                    <p class="text-sm text-gray-600 mt-1">AI 코치와 대화하며 글을 개선해보세요</p>
                 </div>
                 
-                <div class="mb-4">
-                    <label for="writing-content" class="block text-sm font-medium text-gray-700 mb-2">내용</label>
-                    <textarea 
-                        id="writing-content" 
-                        rows="15"
-                        placeholder="여기에 글을 작성하세요..."
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    ></textarea>
+                <!-- 채팅 메시지 영역 -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                    <div class="text-center text-gray-500 text-sm py-8">
+                        AI 코칭을 받으려면 "AI 코칭 받기" 버튼을 클릭하세요.
+                    </div>
                 </div>
                 
-                <div class="flex space-x-4">
-                    <button 
-                        id="save-writing-btn" 
-                        class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                        저장하기
-                    </button>
-                    <button 
-                        id="get-coaching-btn" 
-                        class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                    >
-                        AI 코칭 받기
-                    </button>
+                <!-- 채팅 입력 영역 -->
+                <div class="p-4 border-t border-gray-200 bg-white">
+                    <div class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            id="chat-input" 
+                            placeholder="질문이나 메시지를 입력하세요..."
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            disabled
+                        />
+                        <button 
+                            id="send-chat-btn" 
+                            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            전송
+                        </button>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- AI 코칭 결과 -->
-            <div id="coaching-result" class="hidden mt-6 p-6 bg-purple-50 rounded-lg">
-                <h3 class="text-xl font-bold mb-4 text-purple-800">AI 코칭 결과</h3>
-                <div id="coaching-content" class="prose max-w-none"></div>
             </div>
         </div>
     `;
     
     let selectedTopicOrGenre = null;
     let selectedType = null; // 'topic' or 'genre'
+    let conversationHistory = []; // 대화 히스토리 저장
     
     // 주제/장르 목록 로드
     const { topics, genres } = await getTopicsAndGenres();
@@ -152,10 +185,71 @@ export async function renderWriteScreen() {
         });
     }
     
+    // 채팅 관련 함수들 (먼저 정의)
+    const chatInput = document.getElementById('chat-input');
+    const sendChatBtn = document.getElementById('send-chat-btn');
+    
+    function addChatMessage(role, content) {
+        const chatMessages = document.getElementById('chat-messages');
+        
+        // 초기 안내 메시지 제거
+        const initialMessage = chatMessages.querySelector('.text-center');
+        if (initialMessage) {
+            initialMessage.remove();
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+        
+        const messageBubble = document.createElement('div');
+        messageBubble.className = `max-w-[80%] rounded-lg p-3 ${
+            role === 'user' 
+                ? 'bg-purple-600 text-white' 
+                : role === 'system'
+                ? 'bg-yellow-100 text-yellow-800 text-sm'
+                : 'bg-white border border-gray-200 text-gray-800'
+        }`;
+        
+        // 마크다운을 HTML로 변환
+        const html = convertMarkdownToHTML(content);
+        messageBubble.innerHTML = html;
+        
+        messageDiv.appendChild(messageBubble);
+        chatMessages.appendChild(messageDiv);
+        
+        // 스크롤을 맨 아래로
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    function enableChatInput() {
+        chatInput.disabled = false;
+        sendChatBtn.disabled = false;
+        chatInput.placeholder = '질문이나 메시지를 입력하세요...';
+    }
+    
+    function disableChatInput() {
+        chatInput.disabled = true;
+        sendChatBtn.disabled = true;
+        chatInput.placeholder = 'AI 코칭을 받으려면 "AI 코칭 받기" 버튼을 클릭하세요.';
+    }
+    
+    function clearChatMessages() {
+        const chatMessages = document.getElementById('chat-messages');
+        chatMessages.innerHTML = `
+            <div class="text-center text-gray-500 text-sm py-8">
+                AI 코칭을 받으려면 "AI 코칭 받기" 버튼을 클릭하세요.
+            </div>
+        `;
+    }
+    
     function showSelected() {
         document.getElementById('selected-item').classList.remove('hidden');
         document.getElementById('selected-item-name').textContent = selectedTopicOrGenre.name;
         document.getElementById('writing-form').classList.remove('hidden');
+        // 주제/장르가 변경되면 대화 히스토리 초기화
+        conversationHistory = [];
+        clearChatMessages();
+        disableChatInput();
     }
     
     // 저장하기 버튼
@@ -188,7 +282,10 @@ export async function renderWriteScreen() {
             // 폼 초기화
             document.getElementById('writing-title').value = '';
             document.getElementById('writing-content').value = '';
-            document.getElementById('coaching-result').classList.add('hidden');
+            // 저장 시 대화 히스토리도 초기화
+            conversationHistory = [];
+            clearChatMessages();
+            disableChatInput();
         } catch (error) {
             alert('저장에 실패했습니다: ' + error.message);
         }
@@ -214,12 +311,27 @@ export async function renderWriteScreen() {
         btn.textContent = 'AI 코칭 받는 중...';
         
         try {
-            const coaching = await getAICoaching(title, content, selectedTopicOrGenre.name);
-            document.getElementById('coaching-result').classList.remove('hidden');
+            // 대화 히스토리를 포함하여 AI 코칭 요청 (주제/장르 ID와 타입도 전달)
+            const result = await getAICoaching(
+                title, 
+                content, 
+                selectedTopicOrGenre.name, 
+                conversationHistory,
+                selectedTopicOrGenre.id,
+                selectedType
+            );
             
-            // 마크다운을 HTML로 변환 (간단한 변환)
-            const html = convertMarkdownToHTML(coaching);
-            document.getElementById('coaching-content').innerHTML = html;
+            // 대화 히스토리 업데이트
+            conversationHistory = result.conversationHistory;
+            
+            // 채팅창에 사용자 메시지 표시 (글 제목과 내용 요약)
+            addChatMessage('user', `제목: ${title}\n\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+            
+            // 채팅창에 AI 응답 표시
+            addChatMessage('assistant', result.response);
+            
+            // 채팅 입력 활성화
+            enableChatInput();
         } catch (error) {
             alert('AI 코칭을 받는 중 오류가 발생했습니다: ' + error.message);
         } finally {
@@ -227,6 +339,59 @@ export async function renderWriteScreen() {
             btn.textContent = 'AI 코칭 받기';
         }
     });
+    
+    // 채팅 메시지 전송
+    sendChatBtn.addEventListener('click', async () => {
+        await handleChatSend();
+    });
+    
+    chatInput.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            await handleChatSend();
+        }
+    });
+    
+    async function handleChatSend() {
+        const message = chatInput.value.trim();
+        if (!message) return;
+        
+        // 채팅 입력 비활성화
+        chatInput.disabled = true;
+        sendChatBtn.disabled = true;
+        sendChatBtn.textContent = '전송 중...';
+        
+        // 사용자 메시지 표시
+        addChatMessage('user', message);
+        chatInput.value = '';
+        
+        try {
+            // 현재 글의 제목과 내용을 포함하여 메시지 전송
+            const title = document.getElementById('writing-title').value.trim();
+            const content = document.getElementById('writing-content').value.trim();
+            
+            // 글 정보를 포함한 메시지 생성
+            let fullMessage = message;
+            if (title && content) {
+                fullMessage = `현재 제목: ${title}\n현재 내용: ${content}\n\n${message}`;
+            }
+            
+            const result = await sendChatMessage(fullMessage, conversationHistory);
+            
+            // 대화 히스토리 업데이트
+            conversationHistory = result.conversationHistory;
+            
+            // AI 응답 표시
+            addChatMessage('assistant', result.response);
+        } catch (error) {
+            addChatMessage('system', '오류가 발생했습니다: ' + error.message);
+        } finally {
+            chatInput.disabled = false;
+            sendChatBtn.disabled = false;
+            sendChatBtn.textContent = '전송';
+            chatInput.focus();
+        }
+    }
 }
 
 // 간단한 마크다운 변환 함수
