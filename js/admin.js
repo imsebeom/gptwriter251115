@@ -6,16 +6,167 @@ import {
     deleteTopic, 
     deleteGenre,
     getUserName,
+    getUserData,
     getCoachingPrompt,
     saveCoachingPrompt,
     getTopicPrompt,
     saveTopicPrompt,
     getGenrePrompt,
-    saveGenrePrompt
+    saveGenrePrompt,
+    deleteTeacher,
+    updateStudentTeacher,
+    getAllTeachers,
+    getAllStudents,
+    db
 } from './firebase.js';
 import { adminConfig } from './firebase-config.js';
-import { currentUser } from './app.js';
+import { currentUser, currentUserType } from './app.js';
 import { generateProgressReport } from './openai.js';
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// 회원 관리 로드
+async function loadUserManagement() {
+    await Promise.all([
+        loadTeachersManagement(),
+        loadStudentsManagement()
+    ]);
+}
+
+// 교사 관리 로드
+async function loadTeachersManagement() {
+    const teachersList = document.getElementById('teachers-list');
+    
+    try {
+        const teachers = await getAllTeachers();
+        
+        if (teachers.length === 0) {
+            teachersList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">등록된 교사가 없습니다.</p>';
+            return;
+        }
+        
+        teachersList.innerHTML = teachers.map(teacher => `
+            <div class="bg-gray-50 rounded-lg p-3 mb-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <p class="font-semibold text-gray-800">${escapeHtml(teacher.name || 'N/A')}</p>
+                        <p class="text-xs text-gray-600 mt-1">${escapeHtml(teacher.email || 'N/A')}</p>
+                        <p class="text-xs text-gray-500 mt-1">ID: ${teacher.id.substring(0, 20)}...</p>
+                    </div>
+                    <button 
+                        class="delete-teacher-btn px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-sm"
+                        data-teacher-id="${teacher.id}"
+                        data-teacher-name="${escapeHtml(teacher.name || 'N/A')}"
+                    >
+                        삭제
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        // 삭제 버튼 이벤트
+        teachersList.querySelectorAll('.delete-teacher-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const teacherId = btn.dataset.teacherId;
+                const teacherName = btn.dataset.teacherName;
+                
+                if (confirm(`"${teacherName}" 교사를 정말 삭제하시겠습니까?\n\n주의: 이 작업은 되돌릴 수 없습니다.`)) {
+                    btn.disabled = true;
+                    btn.textContent = '삭제 중...';
+                    try {
+                        await deleteTeacher(teacherId);
+                        alert('교사가 삭제되었습니다.');
+                        await loadTeachersManagement();
+                    } catch (error) {
+                        alert('교사 삭제에 실패했습니다: ' + error.message);
+                        btn.disabled = false;
+                        btn.textContent = '삭제';
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        teachersList.innerHTML = `<p class="text-red-500 text-sm text-center py-4">오류: ${error.message}</p>`;
+    }
+}
+
+// 학생 관리 로드
+async function loadStudentsManagement() {
+    const studentsList = document.getElementById('students-management-list');
+    
+    try {
+        const [students, teachers] = await Promise.all([
+            getAllStudents(),
+            getAllTeachers()
+        ]);
+        
+        if (students.length === 0) {
+            studentsList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">등록된 학생이 없습니다.</p>';
+            return;
+        }
+        
+        // 교사 이름 매핑 생성
+        const teacherMap = new Map();
+        teachers.forEach(teacher => {
+            teacherMap.set(teacher.id, teacher.name);
+        });
+        
+        studentsList.innerHTML = students.map(student => {
+            const currentTeacherName = student.teacherId ? (teacherMap.get(student.teacherId) || '알 수 없음') : '없음';
+            
+            return `
+                <div class="bg-gray-50 rounded-lg p-3 mb-2">
+                    <div class="mb-2">
+                        <p class="font-semibold text-gray-800">${escapeHtml(student.name || 'N/A')}</p>
+                        <p class="text-xs text-gray-600 mt-1">아이디: ${escapeHtml(student.email || 'N/A')}</p>
+                        <p class="text-xs text-gray-500 mt-1">현재 교사: <span class="font-medium">${escapeHtml(currentTeacherName)}</span></p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select 
+                            class="change-teacher-select flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            data-student-id="${student.id}"
+                        >
+                            <option value="">교사 없음</option>
+                            ${teachers.map(teacher => `
+                                <option value="${teacher.id}" ${student.teacherId === teacher.id ? 'selected' : ''}>
+                                    ${escapeHtml(teacher.name)}
+                                </option>
+                            `).join('')}
+                        </select>
+                        <button 
+                            class="save-teacher-btn px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
+                            data-student-id="${student.id}"
+                        >
+                            저장
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // 저장 버튼 이벤트
+        studentsList.querySelectorAll('.save-teacher-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const studentId = btn.dataset.studentId;
+                const select = studentsList.querySelector(`.change-teacher-select[data-student-id="${studentId}"]`);
+                const newTeacherId = select.value || null;
+                
+                btn.disabled = true;
+                btn.textContent = '저장 중...';
+                try {
+                    await updateStudentTeacher(studentId, newTeacherId);
+                    alert('교사 매칭이 변경되었습니다.');
+                    await loadStudentsManagement();
+                } catch (error) {
+                    alert('교사 매칭 변경에 실패했습니다: ' + error.message);
+                    btn.disabled = false;
+                    btn.textContent = '저장';
+                }
+            });
+        });
+    } catch (error) {
+        studentsList.innerHTML = `<p class="text-red-500 text-sm text-center py-4">오류: ${error.message}</p>`;
+    }
+}
 
 export async function renderAdminScreen() {
     // 관리자 권한 확인
@@ -24,14 +175,17 @@ export async function renderAdminScreen() {
         return;
     }
     
-    const userName = await getUserName(currentUser.uid);
-    if (userName !== adminConfig.adminName) {
+    const userData = await getUserData(currentUser.uid);
+    const userType = userData?.userType;
+    
+    // 교사 또는 테스트 사용자만 접근 가능
+    if (userType !== 'teacher' && userType !== 'test') {
         const contentArea = document.getElementById('content-area');
         contentArea.innerHTML = `
             <div class="bg-white rounded-lg shadow-lg p-6">
                 <div class="text-center py-12">
                     <h2 class="text-2xl font-bold text-red-600 mb-4">접근 권한 없음</h2>
-                    <p class="text-gray-600">관리자만 이 페이지에 접근할 수 있습니다.</p>
+                    <p class="text-gray-600">관리자(교사 또는 테스트 사용자)만 이 페이지에 접근할 수 있습니다.</p>
                 </div>
             </div>
         `;
@@ -70,6 +224,14 @@ export async function renderAdminScreen() {
                     >
                         학생 리포트
                     </button>
+                    ${userType === 'test' ? `
+                    <button 
+                        id="tab-user-management" 
+                        class="tab-btn px-4 py-2 font-semibold text-gray-600 hover:text-gray-800"
+                    >
+                        회원 관리
+                    </button>
+                    ` : ''}
                 </nav>
             </div>
             
@@ -192,6 +354,35 @@ export async function renderAdminScreen() {
                     </div>
                 </div>
             </div>
+            
+            ${userType === 'test' ? `
+            <!-- 회원 관리 탭 -->
+            <div id="user-management-tab" class="tab-content hidden">
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- 교사 관리 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-700">교사 관리</h3>
+                        <div id="teachers-list" class="space-y-2">
+                            <div class="text-center py-4">
+                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                <p class="mt-2 text-gray-500 text-sm">로딩 중...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 학생 관리 -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-700">학생 관리</h3>
+                        <div id="students-management-list" class="space-y-2">
+                            <div class="text-center py-4">
+                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                                <p class="mt-2 text-gray-500 text-sm">로딩 중...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
         </div>
     `;
     
@@ -212,6 +403,14 @@ export async function renderAdminScreen() {
         switchTab('reports');
         loadStudentReports();
     });
+    
+    // 회원 관리 탭 (테스트 사용자만)
+    if (userType === 'test') {
+        document.getElementById('tab-user-management').addEventListener('click', () => {
+            switchTab('user-management');
+            loadUserManagement();
+        });
+    }
     
     // 제출 현황 로드
     await loadSubmissions();
@@ -342,6 +541,10 @@ function switchTab(tabName) {
         document.getElementById('tab-reports').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
         document.getElementById('tab-reports').classList.remove('text-gray-600');
         document.getElementById('reports-tab').classList.remove('hidden');
+    } else if (tabName === 'user-management') {
+        document.getElementById('tab-user-management').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+        document.getElementById('tab-user-management').classList.remove('text-gray-600');
+        document.getElementById('user-management-tab').classList.remove('hidden');
     }
 }
 
@@ -349,9 +552,29 @@ async function loadSubmissions() {
     const submissionsList = document.getElementById('submissions-list');
     
     try {
-        const writings = await getWritings();
+        let writings = await getWritings();
         
-        if (writings.length === 0) {
+        // 테스트 사용자는 모든 글 표시, 교사는 자신의 학생 글만 필터링
+        let filteredWritings = writings;
+        if (currentUserType !== 'test' && currentUser) {
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const myStudentNames = new Set();
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                if (userData.userType === 'student' && userData.teacherId === currentUser.uid) {
+                    myStudentNames.add(userData.name);
+                }
+            });
+            
+            filteredWritings = writings.filter(writing => {
+                return myStudentNames.has(writing.userName);
+            });
+        } else {
+            filteredWritings = writings;
+        }
+        
+        if (filteredWritings.length === 0) {
             submissionsList.innerHTML = '<p class="text-center text-gray-500 py-8">아직 제출된 글이 없습니다.</p>';
             return;
         }
@@ -359,7 +582,7 @@ async function loadSubmissions() {
         // 학생별로 그룹화
         const studentsMap = new Map();
         
-        writings.forEach(writing => {
+        filteredWritings.forEach(writing => {
             const userId = writing.userId;
             if (!studentsMap.has(userId)) {
                 studentsMap.set(userId, {
@@ -839,7 +1062,25 @@ async function loadStudentReports() {
     try {
         const writings = await getWritings();
         
-        if (writings.length === 0) {
+        // 테스트 사용자는 모든 글 표시, 교사는 자신의 학생 글만 필터링
+        let filteredWritings = writings;
+        if (currentUserType !== 'test' && currentUser) {
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const myStudentNames = new Set();
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                if (userData.userType === 'student' && userData.teacherId === currentUser.uid) {
+                    myStudentNames.add(userData.name);
+                }
+            });
+            
+            filteredWritings = writings.filter(writing => {
+                return myStudentNames.has(writing.userName);
+            });
+        }
+        
+        if (filteredWritings.length === 0) {
             reportsList.innerHTML = '<p class="text-center text-gray-500 py-8">아직 제출된 글이 없습니다.</p>';
             return;
         }
@@ -848,7 +1089,7 @@ async function loadStudentReports() {
         // userName으로 그룹화 (익명 로그인 시 userId가 매번 달라질 수 있음)
         const studentsMap = new Map();
         
-        writings.forEach(writing => {
+        filteredWritings.forEach(writing => {
             // userName을 기준으로 그룹화 (같은 이름이면 같은 학생으로 간주)
             const userName = writing.userName || '익명';
             

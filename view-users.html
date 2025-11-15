@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>회원 목록 조회</title>
+    <script type="module">
+        import { firebaseConfig } from './js/firebase-config.js';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        async function loadUsers() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p class="text-blue-500">데이터를 불러오는 중...</p>';
+            
+            try {
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                const users = [];
+                
+                usersSnapshot.forEach(doc => {
+                    const userData = doc.data();
+                    users.push({
+                        id: doc.id,
+                        ...userData,
+                        createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate().toLocaleString('ko-KR') : userData.createdAt,
+                        lastLoginAt: userData.lastLoginAt?.toDate ? userData.lastLoginAt.toDate().toLocaleString('ko-KR') : userData.lastLoginAt
+                    });
+                });
+                
+                // 사용자 타입별로 그룹화
+                const students = users.filter(u => u.userType === 'student');
+                const teachers = users.filter(u => u.userType === 'teacher');
+                const testUsers = users.filter(u => u.userType === 'test');
+                
+                let html = `
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-4">전체 회원 통계</h2>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="bg-blue-100 p-4 rounded-lg">
+                                <p class="text-sm text-gray-600">학생</p>
+                                <p class="text-2xl font-bold text-blue-600">${students.length}명</p>
+                            </div>
+                            <div class="bg-green-100 p-4 rounded-lg">
+                                <p class="text-sm text-gray-600">교사</p>
+                                <p class="text-2xl font-bold text-green-600">${teachers.length}명</p>
+                            </div>
+                            <div class="bg-purple-100 p-4 rounded-lg">
+                                <p class="text-sm text-gray-600">테스트</p>
+                                <p class="text-2xl font-bold text-purple-600">${testUsers.length}명</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 학생 목록
+                if (students.length > 0) {
+                    html += `
+                        <div class="mb-6">
+                            <h2 class="text-xl font-bold mb-3 text-blue-600">학생 목록 (${students.length}명)</h2>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full bg-white border border-gray-200">
+                                    <thead class="bg-blue-50">
+                                        <tr>
+                                            <th class="px-4 py-2 border">이름</th>
+                                            <th class="px-4 py-2 border">아이디</th>
+                                            <th class="px-4 py-2 border">교사 ID</th>
+                                            <th class="px-4 py-2 border">생성일</th>
+                                            <th class="px-4 py-2 border">마지막 로그인</th>
+                                            <th class="px-4 py-2 border">문서 ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${students.map(s => `
+                                            <tr>
+                                                <td class="px-4 py-2 border">${escapeHtml(s.name || 'N/A')}</td>
+                                                <td class="px-4 py-2 border">${escapeHtml(s.email || 'N/A')}</td>
+                                                <td class="px-4 py-2 border text-xs">${s.teacherId ? s.teacherId.substring(0, 20) + '...' : '없음'}</td>
+                                                <td class="px-4 py-2 border text-sm">${s.createdAt || 'N/A'}</td>
+                                                <td class="px-4 py-2 border text-sm">${s.lastLoginAt || 'N/A'}</td>
+                                                <td class="px-4 py-2 border text-xs font-mono">${s.id.substring(0, 20)}...</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // 교사 목록
+                if (teachers.length > 0) {
+                    html += `
+                        <div class="mb-6">
+                            <h2 class="text-xl font-bold mb-3 text-green-600">교사 목록 (${teachers.length}명)</h2>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full bg-white border border-gray-200">
+                                    <thead class="bg-green-50">
+                                        <tr>
+                                            <th class="px-4 py-2 border">이름</th>
+                                            <th class="px-4 py-2 border">이메일</th>
+                                            <th class="px-4 py-2 border">생성일</th>
+                                            <th class="px-4 py-2 border">문서 ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${teachers.map(t => `
+                                            <tr>
+                                                <td class="px-4 py-2 border">${escapeHtml(t.name || 'N/A')}</td>
+                                                <td class="px-4 py-2 border">${escapeHtml(t.email || 'N/A')}</td>
+                                                <td class="px-4 py-2 border text-sm">${t.createdAt || 'N/A'}</td>
+                                                <td class="px-4 py-2 border text-xs font-mono">${t.id.substring(0, 20)}...</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // 테스트 사용자 목록
+                if (testUsers.length > 0) {
+                    html += `
+                        <div class="mb-6">
+                            <h2 class="text-xl font-bold mb-3 text-purple-600">테스트 사용자 목록 (${testUsers.length}명)</h2>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full bg-white border border-gray-200">
+                                    <thead class="bg-purple-50">
+                                        <tr>
+                                            <th class="px-4 py-2 border">이름</th>
+                                            <th class="px-4 py-2 border">생성일</th>
+                                            <th class="px-4 py-2 border">문서 ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${testUsers.map(t => `
+                                            <tr>
+                                                <td class="px-4 py-2 border">${escapeHtml(t.name || 'N/A')}</td>
+                                                <td class="px-4 py-2 border text-sm">${t.createdAt || 'N/A'}</td>
+                                                <td class="px-4 py-2 border text-xs font-mono">${t.id.substring(0, 20)}...</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // JSON 데이터도 표시
+                html += `
+                    <div class="mt-6">
+                        <h2 class="text-xl font-bold mb-3">전체 데이터 (JSON)</h2>
+                        <pre class="bg-gray-100 p-4 rounded-lg overflow-x-auto text-xs">${JSON.stringify(users, null, 2)}</pre>
+                    </div>
+                `;
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="text-red-500">오류 발생: ${error.message}</p>`;
+                console.error(error);
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return 'N/A';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        document.getElementById('load-btn').addEventListener('click', loadUsers);
+        
+        // 페이지 로드 시 자동으로 데이터 로드
+        loadUsers();
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        table {
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+        }
+        .bg-blue-100 { background-color: #dbeafe; }
+        .bg-green-100 { background-color: #dcfce7; }
+        .bg-purple-100 { background-color: #f3e8ff; }
+        .bg-blue-50 { background-color: #eff6ff; }
+        .bg-green-50 { background-color: #f0fdf4; }
+        .bg-purple-50 { background-color: #faf5ff; }
+    </style>
+</head>
+<body>
+    <h1>Firestore 회원 목록 조회</h1>
+    <button id="load-btn" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 20px;">
+        데이터 새로고침
+    </button>
+    <div id="result"></div>
+</body>
+</html>
+

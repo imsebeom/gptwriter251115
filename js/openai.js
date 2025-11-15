@@ -7,18 +7,37 @@ import { getCoachingPrompt, getTopicPrompt, getGenrePrompt } from './firebase.js
  * 
  * @param {string} title - 글의 제목
  * @param {string} content - 글의 내용
- * @param {string} topicOrGenre - 선택한 주제 또는 장르
+ * @param {string} topicOrGenre - 선택한 주제 또는 장르 (표시용)
  * @param {Array} conversationHistory - 이전 대화 히스토리 (선택사항)
- * @param {string} topicOrGenreId - 선택한 주제 또는 장르의 ID (선택사항)
- * @param {string} type - 'topic' 또는 'genre' (선택사항)
+ * @param {string} topicOrGenreId - 선택한 주제 또는 장르의 ID (선택사항, 주 우선)
+ * @param {string} type - 'topic' 또는 'genre' (선택사항, 주 우선)
+ * @param {string} topicId - 선택한 주제의 ID (선택사항)
+ * @param {string} genreId - 선택한 장르의 ID (선택사항)
  * @returns {Promise<string>} AI 코칭 응답
  */
-export async function getAICoaching(title, content, topicOrGenre, conversationHistory = [], topicOrGenreId = null, type = null) {
+export async function getAICoaching(title, content, topicOrGenre, conversationHistory = [], topicOrGenreId = null, type = null, topicId = null, genreId = null) {
     // Firestore에서 기본 프롬프트 가져오기
     let systemPrompt = await getCoachingPrompt();
     
-    // 주제/장르별 추가 프롬프트 가져오기
-    if (topicOrGenreId && type) {
+    // 주제/장르별 추가 프롬프트 가져오기 (주제와 장르 모두 적용)
+    let additionalPrompts = [];
+    
+    if (topicId) {
+        const topicPrompt = await getTopicPrompt(topicId);
+        if (topicPrompt) {
+            additionalPrompts.push(`[주제별 추가 프롬프트]\n${topicPrompt}`);
+        }
+    }
+    
+    if (genreId) {
+        const genrePrompt = await getGenrePrompt(genreId);
+        if (genrePrompt) {
+            additionalPrompts.push(`[장르별 추가 프롬프트]\n${genrePrompt}`);
+        }
+    }
+    
+    // 기존 방식 호환성 (하위 호환)
+    if (topicOrGenreId && type && !topicId && !genreId) {
         let additionalPrompt = '';
         if (type === 'topic') {
             additionalPrompt = await getTopicPrompt(topicOrGenreId);
@@ -26,10 +45,14 @@ export async function getAICoaching(title, content, topicOrGenre, conversationHi
             additionalPrompt = await getGenrePrompt(topicOrGenreId);
         }
         
-        // 추가 프롬프트가 있으면 기본 프롬프트에 추가
         if (additionalPrompt) {
-            systemPrompt += '\n\n' + additionalPrompt;
+            additionalPrompts.push(additionalPrompt);
         }
+    }
+    
+    // 추가 프롬프트가 있으면 기본 프롬프트에 추가
+    if (additionalPrompts.length > 0) {
+        systemPrompt += '\n\n' + additionalPrompts.join('\n\n');
     }
     
     // 프롬프트의 변수 치환
@@ -185,7 +208,7 @@ export async function generateProgressReport(userName, writings) {
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
         return dateA - dateB;
     });
-    
+    링
     // 글 정보를 포맷팅
     const writingsText = sortedWritings.map((writing, index) => {
         const createdAt = writing.createdAt?.toDate ? writing.createdAt.toDate() : new Date();
