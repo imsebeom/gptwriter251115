@@ -72,6 +72,7 @@ export async function signUpStudent(name, email, password, teacherId) {
     const currentUserProvider = currentAuthUser?.providerData?.[0]?.providerId;
     const currentUserData = currentAuthUser ? await getUserData(currentAuthUser.uid) : null;
     const currentUserName = currentUserData?.name;
+    const currentUserUid = currentAuthUser?.uid;
     
     try {
         // 중복 체크: 같은 아이디가 이미 있는지 확인
@@ -86,42 +87,53 @@ export async function signUpStudent(name, email, password, teacherId) {
         // 비밀번호 해시
         const hashedPassword = await hashPassword(password);
         
-        // 익명 인증으로 uid 생성 (임시)
-        const userCredential = await signInAnonymously(auth);
-        const uid = userCredential.user.uid;
-        
-        // 사용자 정보를 Firestore에 저장
-        await setDoc(doc(db, 'users', uid), {
-            name: name,
-            email: email, // 로그인 아이디
-            passwordHash: hashedPassword, // 해시된 비밀번호
-            userType: 'student',
-            teacherId: teacherId, // 학생을 추가한 교사 ID
-            createdAt: new Date()
-        }, { merge: true });
-        
-        // 원래 사용자로 복원
-        await firebaseSignOut(auth);
-        
-        // 원래 사용자가 있었다면 다시 로그인
-        if (currentAuthUser && currentUserProvider) {
-            if (currentUserProvider === 'google.com') {
-                // 구글 로그인 사용자는 다시 로그인 시도
-                try {
-                    const provider = new GoogleAuthProvider();
-                    await signInWithPopup(auth, provider);
-                } catch (googleError) {
-                    // 구글 로그인 실패 시 null 반환하여 학생관리 페이지에서 처리
-                    console.error('구글 로그인 복원 실패:', googleError);
-                    return { success: true, studentId: uid, needsReload: true };
-                }
-            } else if (currentUserProvider === 'anonymous' && currentUserName) {
-                // 익명 사용자는 이름으로 다시 로그인
+        // 구글 로그인 사용자는 자동 재로그인을 시도하지 않고, 로그아웃 상태로 유지
+        if (currentUserProvider === 'google.com' && currentAuthUser) {
+            // 임시로 익명 인증을 사용하여 학생 문서 생성
+            const tempCredential = await signInAnonymously(auth);
+            const studentUid = tempCredential.user.uid;
+            
+            // 학생 정보 저장
+            await setDoc(doc(db, 'users', studentUid), {
+                name: name,
+                email: email,
+                passwordHash: hashedPassword,
+                userType: 'student',
+                teacherId: teacherId,
+                createdAt: new Date()
+            }, { merge: true });
+            
+            // 로그아웃 (구글 로그인은 자동 복원이 안 되므로 수동 로그인 필요)
+            await firebaseSignOut(auth);
+            
+            // 구글 로그인 사용자는 자동 복원이 안 되므로 needsReload 플래그 반환
+            // 학생관리 페이지에서 페이지 새로고침 후 다시 로그인하도록 안내
+            return { success: true, studentId: studentUid, needsReload: true };
+        } else {
+            // 익명 사용자나 다른 경우
+            const userCredential = await signInAnonymously(auth);
+            const uid = userCredential.user.uid;
+            
+            // 사용자 정보를 Firestore에 저장
+            await setDoc(doc(db, 'users', uid), {
+                name: name,
+                email: email, // 로그인 아이디
+                passwordHash: hashedPassword, // 해시된 비밀번호
+                userType: 'student',
+                teacherId: teacherId, // 학생을 추가한 교사 ID
+                createdAt: new Date()
+            }, { merge: true });
+            
+            // 원래 사용자로 복원
+            await firebaseSignOut(auth);
+            
+            // 익명 사용자는 이름으로 다시 로그인
+            if (currentUserProvider === 'anonymous' && currentUserName) {
                 await loginAnonymously(currentUserName);
             }
+            
+            return { success: true, studentId: uid };
         }
-        
-        return { success: true, studentId: uid };
     } catch (error) {
         // 오류 발생 시 원래 사용자로 복원 시도
         if (currentAuthUser && currentUserProvider === 'anonymous' && currentUserName) {

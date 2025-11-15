@@ -208,7 +208,7 @@ export async function generateProgressReport(userName, writings) {
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
         return dateA - dateB;
     });
-    링
+    
     // 글 정보를 포맷팅
     const writingsText = sortedWritings.map((writing, index) => {
         const createdAt = writing.createdAt?.toDate ? writing.createdAt.toDate() : new Date();
