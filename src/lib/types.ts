@@ -61,6 +61,8 @@ export interface Writing {
   topicId?: string | null;
   genreId?: string | null;
   paragraphs?: number;
+  /** 0~100 grammar accuracy score computed by gpt-5-nano at save time. */
+  grammarScore?: number;
   likes: number;
   likedBy?: string[];
   comments?: Comment[];

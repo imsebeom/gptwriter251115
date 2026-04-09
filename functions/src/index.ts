@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 
 if (!getApps().length) initializeApp();
+// deploy marker: grammar-score v1
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const OPENAI_MODEL = 'gpt-5-nano';
@@ -222,6 +223,8 @@ export const api = onRequest(
           return await handleJoinClass(req, res, user);
         case 'seed-test':
           return await handleSeedTest(req, res, user);
+        case 'grammar-score':
+          return await handleGrammarScore(req, res);
         default:
           res.status(404).json({ error: `unknown endpoint: ${path}` });
           return;
@@ -352,6 +355,56 @@ ${w.content}
   );
 
   res.json({ report: answer });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/grammar-score — rate 0~100 grammar accuracy for a short Korean
+// student essay. Returns just a number so the client can store it on the
+// writings document.
+// ---------------------------------------------------------------------------
+
+async function handleGrammarScore(req: any, res: any) {
+  const { content } = req.body ?? {};
+  if (!content || typeof content !== 'string') {
+    res.status(400).json({ error: 'content is required' });
+    return;
+  }
+
+  const systemPrompt = `당신은 한국어 초등학생 작문의 문법·맞춤법·어휘 사용을 평가하는 도우미입니다.
+아래 규칙을 엄격히 지키세요.
+
+1. 제공된 글의 "문법 정확성" 을 0에서 100 사이의 정수로 평가하세요.
+2. 기준: 맞춤법, 띄어쓰기, 조사 사용, 시제 일치, 문장 완결성, 주술 호응.
+3. 철자·문법 오류가 전혀 없으면 95 이상. 작은 실수 1~2개면 85~94. 여러 개면 70~84. 문장 성립이 어려울 정도면 50~69. 전혀 맞지 않으면 50 미만.
+4. 내용·주제·창의성은 절대 평가하지 마세요. 오직 문법·맞춤법만 봅니다.
+5. 출력 형식은 JSON 한 줄: {"score": <integer 0~100>}. 설명이나 다른 말은 절대 붙이지 마세요.`;
+
+  const userMessage = `다음 글의 문법 정확성을 평가해주세요.\n---\n${content}\n---`;
+
+  const answer = await callOpenAI(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ],
+    400,
+  );
+
+  // Parse defensively — model may slip and add text around the JSON.
+  let score = 0;
+  try {
+    const jsonMatch = answer.match(/\{[^}]*"score"[^}]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.score === 'number') score = Math.max(0, Math.min(100, Math.round(parsed.score)));
+    } else {
+      const numMatch = answer.match(/\b\d{1,3}\b/);
+      if (numMatch) score = Math.max(0, Math.min(100, Number(numMatch[0])));
+    }
+  } catch (err) {
+    console.error('grammar-score parse failed', err, 'raw:', answer);
+  }
+
+  res.json({ score, raw: answer });
 }
 
 // ---------------------------------------------------------------------------

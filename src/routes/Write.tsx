@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthCtx } from '../lib/authContext';
 import { saveWriting, subscribeGenres, subscribeTopics } from '../lib/firestore';
 import type { Genre, Topic, ChatMessage } from '../lib/types';
-import { requestCoaching, sendChatMessage } from '../lib/coach';
+import { requestCoaching, requestGrammarScore, sendChatMessage } from '../lib/coach';
 import { mdToHtml } from '../lib/markdown';
 import Icon from '../components/Icon';
 
@@ -108,8 +108,13 @@ export default function Write() {
   const save = async () => {
     if (!profile || !selection || !classId || !canSubmit) return;
     setSaveBusy(true);
-    setSaveMsg(null);
+    setSaveMsg('문법 채점 중…');
     try {
+      // Run grammar scoring first so the value is persisted with the doc.
+      // Failure is tolerable — the grammar score just falls back to 0 and
+      // the writing is still saved.
+      const grammarScore = await requestGrammarScore(joinedContent);
+      setSaveMsg('저장 중…');
       await saveWriting({
         userId: profile.uid,
         userName: profile.name,
@@ -122,8 +127,9 @@ export default function Write() {
         topicId: selection.type === 'topic' ? selection.id : null,
         genreId: selection.type === 'genre' ? selection.id : null,
         paragraphs: selection.paragraphs,
+        grammarScore,
       });
-      setSaveMsg('저장되었습니다. 갤러리에서 확인하세요!');
+      setSaveMsg(`저장되었습니다. 문법 점수: ${grammarScore}점`);
     } catch (e: any) {
       setSaveMsg(`저장 실패: ${e?.message ?? e}`);
     } finally {

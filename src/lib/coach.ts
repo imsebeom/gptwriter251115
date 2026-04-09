@@ -45,6 +45,16 @@ export async function sendChatMessage(message: string, history: ChatMessage[] = 
   return postJson<CoachResponse>('chat', { message, conversationHistory: history });
 }
 
+export async function requestGrammarScore(content: string): Promise<number> {
+  try {
+    const { score } = await postJson<{ score: number }>('grammar-score', { content });
+    return typeof score === 'number' ? score : 0;
+  } catch (err) {
+    console.warn('grammar-score request failed', err);
+    return 0;
+  }
+}
+
 export async function requestProgressReport(userName: string, writings: Writing[]): Promise<string> {
   const payload = writings.map((w) => ({
     title: w.title,

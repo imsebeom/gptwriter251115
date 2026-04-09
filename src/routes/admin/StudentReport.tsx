@@ -96,37 +96,39 @@ export default function StudentReport() {
   // average those maxes across students. This gives "a typical classmate's
   // best" as the 100% reference for the current-state radar.
   const classAvgMax = useMemo(() => {
-    if (groups.length === 0) return { length: 1, vocab: 1, sentence: 1, paragraphs: 1 };
+    if (groups.length === 0) return { length: 1, vocab: 1, sentence: 1, grammar: 100 };
     let sumLen = 0;
     let sumVocab = 0;
     let sumSent = 0;
-    let sumPara = 0;
+    let sumGrammar = 0;
     for (const g of groups) {
       let ml = 0,
         mv = 0,
         ms = 0,
-        mp = 0;
+        mgr = 0;
       for (const w of g.writings) {
         const len = w.content.length;
         const voc = new Set(w.content.split(/\s+/).filter(Boolean)).size;
         const sentences = w.content.split(/[.!?。]/).filter((s) => s.trim().length > 0);
         const sentAvg = sentences.length ? Math.round(w.content.length / sentences.length) : 0;
-        const para = w.content.split(/\n{2,}/).filter(Boolean).length;
+        const grammar = typeof w.grammarScore === 'number' ? w.grammarScore : 0;
         if (len > ml) ml = len;
         if (voc > mv) mv = voc;
         if (sentAvg > ms) ms = sentAvg;
-        if (para > mp) mp = para;
+        if (grammar > mgr) mgr = grammar;
       }
       sumLen += ml;
       sumVocab += mv;
       sumSent += ms;
-      sumPara += mp;
+      sumGrammar += mgr;
     }
     return {
       length: Math.max(1, sumLen / groups.length),
       vocab: Math.max(1, sumVocab / groups.length),
       sentence: Math.max(1, sumSent / groups.length),
-      paragraphs: Math.max(1, sumPara / groups.length),
+      // Grammar is already a 0-100 score — use the class-average personal
+      // max directly (so the radar denominator is "typical peer best").
+      grammar: Math.max(1, sumGrammar / groups.length),
     };
   }, [groups]);
 
@@ -197,6 +199,7 @@ export default function StudentReport() {
               report={report}
               busy={busy}
               onGenerate={generate}
+              key={selected.userId}
             />
           ) : (
             <div className="text-slate-500 p-6">왼쪽에서 학생을 선택하세요.</div>
@@ -215,7 +218,7 @@ function StudentDetail({
   onGenerate,
 }: {
   summary: Summary;
-  classAvgMax: { length: number; vocab: number; sentence: number; paragraphs: number };
+  classAvgMax: { length: number; vocab: number; sentence: number; grammar: number };
   report: string | null;
   busy: boolean;
   onGenerate: () => void;
@@ -226,7 +229,7 @@ function StudentDetail({
     const sentences = w.content.split(/[.!?。]/).filter((s) => s.trim().length > 0);
     return sentences.length ? Math.round(w.content.length / sentences.length) : 0;
   });
-  const paragraphCounts = summary.writings.map((w) => w.content.split(/\n{2,}/).filter(Boolean).length);
+  const grammarScores = summary.writings.map((w) => (typeof w.grammarScore === 'number' ? w.grammarScore : 0));
   const labels = summary.writings.map((_, i) => `${i + 1}번째`);
 
   const lineChart = (title: string, data: number[], color: string) => ({
@@ -255,7 +258,7 @@ function StudentDetail({
   const maxLen = Math.max(1, ...lengths);
   const maxVocab = Math.max(1, ...vocab);
   const maxSent = Math.max(1, ...sentenceAvg);
-  const maxPara = Math.max(1, ...paragraphCounts);
+  const maxGrammar = Math.max(1, ...grammarScores);
   const normalized = {
     labels,
     datasets: [
@@ -281,8 +284,8 @@ function StudentDetail({
         tension: 0.3,
       },
       {
-        label: '문단 수',
-        data: paragraphCounts.map((v) => Math.round((v / maxPara) * 100)),
+        label: '문법 정확성',
+        data: grammarScores.map((v) => Math.round((v / maxGrammar) * 100)),
         borderColor: '#f59e0b',
         backgroundColor: '#f59e0b22',
         tension: 0.3,
@@ -309,7 +312,7 @@ function StudentDetail({
           </p>
           <Radar
             data={{
-              labels: ['글 길이', '어휘 다양성', '평균 문장 길이', '문단 수'],
+              labels: ['글 길이', '어휘 다양성', '평균 문장 길이', '문법 정확성'],
               datasets: [
                 {
                   label: '최근 글',
@@ -317,7 +320,7 @@ function StudentDetail({
                     Math.round(((lengths.at(-1) ?? 0) / classAvgMax.length) * 100),
                     Math.round(((vocab.at(-1) ?? 0) / classAvgMax.vocab) * 100),
                     Math.round(((sentenceAvg.at(-1) ?? 0) / classAvgMax.sentence) * 100),
-                    Math.round(((paragraphCounts.at(-1) ?? 0) / classAvgMax.paragraphs) * 100),
+                    Math.round(((grammarScores.at(-1) ?? 0) / classAvgMax.grammar) * 100),
                   ],
                   borderColor: '#2563eb',
                   backgroundColor: '#2563eb33',
@@ -332,7 +335,7 @@ function StudentDetail({
                           Math.round(((lengths[0] ?? 0) / classAvgMax.length) * 100),
                           Math.round(((vocab[0] ?? 0) / classAvgMax.vocab) * 100),
                           Math.round(((sentenceAvg[0] ?? 0) / classAvgMax.sentence) * 100),
-                          Math.round(((paragraphCounts[0] ?? 0) / classAvgMax.paragraphs) * 100),
+                          Math.round(((grammarScores[0] ?? 0) / classAvgMax.grammar) * 100),
                         ],
                         borderColor: '#94a3b8',
                         backgroundColor: '#94a3b822',
@@ -384,7 +387,7 @@ function StudentDetail({
           <Line data={lineChart('평균 문장 길이', sentenceAvg, '#10b981')} options={commonOpts} />
         </div>
         <div className="bg-white rounded-xl shadow p-3">
-          <Line data={lineChart('문단 수', paragraphCounts, '#f59e0b')} options={commonOpts} />
+          <Line data={lineChart('문법 정확성', grammarScores, '#f59e0b')} options={commonOpts} />
         </div>
       </div>
 
