@@ -50,16 +50,23 @@ getwriter/
 
 ### AI 코칭 (`/api/coach`)
 - **시스템 프롬프트 조립**: `settings/coachingPrompt` (없으면 `DEFAULT_COACHING_PROMPT`) + 주제/장르의 `additionalPrompt` + `paragraphGoal > 0`이면 문단 요구 안내
-- 기본 프롬프트는 **200자 이내, 간결, 억지 칭찬 금지** (장점 있을 때만 칭찬, 없으면 솔직)
+- 기본 프롬프트는 **200자 이내, 간결, 억지 칭찬 금지** (장점 있을 때만 칭찬, 없으면 솔직). `{topicOrGenre}`는 기본 프롬프트에서 치환 사용.
 - 대화 히스토리 유지: `/api/coach`가 첫 응답 history를 반환, 이후 `/api/chat`으로 자유 대화가 같은 스레드에 이어짐 — UI도 말풍선 채팅 형태
 - OpenAI 호출: `max_completion_tokens: 8000`, `reasoning_effort: 'minimal'` (gpt-5-nano가 reasoning 모델이라 minimal 없으면 출력이 0일 수 있음)
 
+### 문법 정확성 채점 (`/api/grammar-score`)
+- 글 저장 시 Write.tsx가 먼저 `requestGrammarScore` 호출 → 0~100 정수 반환 → `writings.grammarScore` 필드에 같이 저장
+- 시스템 프롬프트가 **맞춤법·띄어쓰기·조사·시제·문장 완결성만** 평가하고 내용/창의성은 절대 평가하지 않도록 엄격히 지시. `{"score": N}` JSON 반환.
+- 레이더 4번째 축 + 성장 추적 4번째 시리즈 + 개별 Line 차트 하나가 모두 `grammarScore` 사용
+- 원래 있던 "문단 수" 지표는 교사가 과제로 제약하는 값이라 매번 100% 고정 → 성장 추적 의미가 없어서 교체함
+
 ### 학생 리포트
-- `StudentReport.tsx`: 클래스 선택 → 학생 목록 → 상세
-- **성장 추적 종합 차트**: 4개 지표(글 길이·어휘 다양성·평균 문장 길이·문단 수)를 각자 최댓값 기준 %로 정규화해 겹쳐 보여줌
+- `StudentReport.tsx`: 클래스 선택 → 학생 목록(한국어 자연정렬) → 상세
+- **4축 레이더 다이어그램 (현재 상태)**: 가장 최근 글의 4개 지표를 **클래스 학생들의 개인 최댓값 평균**(100% 기준)으로 표시. 글이 2편 이상이면 회색 점선으로 첫 글도 오버레이 → 출발점과 현재를 한눈에 비교. 100% 초과(최대 120%까지) 허용 → 또래 평균보다 앞섰음을 시각화.
+- **성장 추적 종합 차트**: 4개 지표(글 길이·어휘 다양성·평균 문장 길이·문법 정확성)를 각자 최댓값 기준 %로 정규화해 한 Line 차트에 겹침
 - 지표별 개별 Line 차트 4개
-- "AI 발전 리포트 생성" → `/api/progress-report` → Chart.js가 아닌 마크다운 텍스트
-- 테스트 클래스에 **데모학생 6편** 시드 (30일~1일 전, 점점 풍부해지는 글) → 꺾은선이 우상향하는 모양 시연용
+- **"AI 발전 리포트 생성"** → `/api/progress-report` → gpt-5-nano가 `## / ###` 계층 마크다운 템플릿을 복사해 채우도록 프롬프트로 강제. 볼드로 제목 대체 금지.
+- 테스트 클래스에 **데모학생 10명 × 4편 = 40편 시드** (정상분포: 약함 2 / 중간 6 / 강함 2). 각 학생의 4편은 content 길이 오름차순으로 시간순 배치 → 최근 글이 첫 글보다 풍부하게 나옴. grammarScore도 티어 범위 내에서 점진 상승.
 
 ### 갤러리
 - `writings` 실시간 구독 (classId 기반), 학생은 자기 클래스만, 교사는 자기 소유 모든 클래스
@@ -95,6 +102,7 @@ name, teacherId, inviteCode (8자 대문자+숫자, I/O/0/1 제외), createdAt
 userId, userName, classId
 title, content (문단 \n\n 결합)
 topicOrGenre, topic?, genre?, topicId?, genreId?, paragraphs?
+grammarScore?: number (0~100, gpt-5-nano 저장 시 채점)
 likes: number, likedBy: string[], comments: {...}[]
 createdAt
 ```
@@ -155,6 +163,10 @@ content: string
 - **LibreOffice/jsPDF 한글**: jsPDF 기본 폰트는 한글 글리프 제한이 있어 포트폴리오 PDF에서 일부 문자가 깨질 수 있음. 이슈 발생 시 Noto Sans KR 임베딩 필요 (아직 미적용).
 - **`diff().hasOnly()` 가드**: writings의 타인 업데이트를 likes/comments만 허용하는 핵심. 다른 필드 수정은 차단.
 - **치환 변수 정책**: `{title}`, `{content}`, `{topicOrGenre}` 세 변수 모두 Functions에서 치환 지원하지만, **기본 프롬프트에는 `{topicOrGenre}`만** 사용. 제목/본문은 이미 user 메시지 템플릿(`이 글은 '...' 주제로 쓴 글입니다 --- 제목: ... 내용: ... ---`)에 자동 포함되므로 system 프롬프트에 또 박으면 중복 전송 + 토큰 낭비. 교사가 커스텀 프롬프트에서 `{title}`/`{content}`를 쓰고 싶으면 그때만 사용하는 opt-in 방식.
+- **문단 수 지표 폐기**: 원본 저장소를 따라 지표로 썼으나, 교사가 과제로 강제하는 값이라 성장 추적에서 매번 100% 고정 → 무의미. gpt-5-nano 기반 `grammarScore`(0~100)로 교체. 비용 trade-off: 저장당 소액 OpenAI 호출 1회 추가.
+- **AI 발전 리포트 템플릿 강제**: 초기 프롬프트가 "마크다운 형식"만 요구 → 모델이 볼드/평문으로 소제목을 출력 → 계층이 납작해짐. 해결: 시스템 프롬프트에 `## / ###` 템플릿을 코드블록으로 박아 복사하도록 유도 + 볼드 대체 금지 명시. `mdToHtml`에 `h4` 지원 추가, `.prose-coach` CSS로 h1 border, h2 파란색 등 시각 계층 강조.
+- **한국어 자연정렬**: 학생 명단·작가 필터 등 모든 이름 정렬에 `localeCompare('ko', { numeric: true })` 사용 → 데모학생1 → 10 순서. 기본 `.sort()`는 "데모학생10"이 "데모학생2"보다 먼저 옴.
+- **데모 시드 성장 진행**: 초기 시드에서 `random.choice`로 템플릿을 뽑아 성장 순서가 섞였음. 해결: 각 학생이 뽑은 4편을 content 길이 오름차순 정렬해 오래된 글 → 최근 글 순서로 배치. `grammarScore`도 티어 내에서 선형 증가(작은 지터 포함). 결과적으로 레이더의 최근 글(파란 실선)이 첫 글(회색 점선)보다 넉넉히 바깥에 위치.
 
 ## 미완·향후 TODO
 
