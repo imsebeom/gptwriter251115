@@ -1,0 +1,133 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isTeacher() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myProfile().userType == 'teacher';
+    }
+
+    function isTestUser() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myProfile().userType == 'test';
+    }
+
+    function isAdmin() { return isTeacher() || isTestUser(); }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      // Any signed-in caller can read user docs (needed for resolving the
+      // current user's classId, joining teacher names, etc). Joining is
+      // bounded in practice because students are only queried by teacherId
+      // or classId via indexed queries.
+      allow read: if isSignedIn();
+
+      // The caller writes only to their own document. Teacher/student/test
+      // profiles are all keyed by auth uid:
+      //  - teachers: written client-side after Google sign-in.
+      //  - students: written by the /api/join-class Cloud Function via the
+      //    Admin SDK (which bypasses these rules).
+      //  - test users: written by /api/seed-test via Admin SDK.
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ---------- classes ----------
+    // Rooms are created and managed by their owning teacher. Students should
+    // NEVER be able to list classes directly — joining is done through the
+    // server-side /api/join-class endpoint which validates the invite code.
+    match /classes/{classId} {
+      // Reads are allowed for the owning teacher and for anyone whose
+      // profile already references this class (students can see their own
+      // class name). The invite code is still visible to the owner only
+      // because listing requires a `teacherId ==` query under these rules.
+      allow read: if isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && myProfile().classId == classId)
+        || (resource != null && resource.data.teacherId == request.auth.uid)
+        || isTestUser()
+      );
+
+      allow create: if isTeacher()
+        && request.resource.data.teacherId == request.auth.uid
+        && request.resource.data.inviteCode is string
+        && request.resource.data.name is string;
+
+      allow update, delete: if isSignedIn()
+        && resource.data.teacherId == request.auth.uid;
+    }
+
+    // ---------- writings ----------
+    match /writings/{writingId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.classId is string
+        && request.resource.data.title is string
+        && request.resource.data.content is string;
+
+      // Owners can fully edit their own writing. Anyone else may only touch
+      // social fields (likes, likedBy, comments).
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['likes', 'likedBy', 'comments'])
+      );
+
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ---------- topics / genres (class-scoped) ----------
+    match /topics/{topicId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.classId is string
+        && (
+          isTestUser()
+          || exists(/databases/$(database)/documents/classes/$(request.resource.data.classId))
+             && get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.teacherId == request.auth.uid
+        );
+      allow update, delete: if isSignedIn() && (
+        isTestUser()
+        || (exists(/databases/$(database)/documents/classes/$(resource.data.classId))
+            && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid)
+      );
+    }
+
+    match /genres/{genreId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.classId is string
+        && (
+          isTestUser()
+          || exists(/databases/$(database)/documents/classes/$(request.resource.data.classId))
+             && get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.teacherId == request.auth.uid
+        );
+      allow update, delete: if isSignedIn() && (
+        isTestUser()
+        || (exists(/databases/$(database)/documents/classes/$(resource.data.classId))
+            && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.teacherId == request.auth.uid)
+      );
+    }
+
+    // ---------- settings ----------
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

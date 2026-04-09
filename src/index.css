@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: "Pretendard", "Noto Sans KR", system-ui, -apple-system, sans-serif;
+}
+
+.prose-coach h1 { @apply text-xl font-bold mt-4 mb-2; }
+.prose-coach h2 { @apply text-lg font-bold mt-3 mb-2; }
+.prose-coach h3 { @apply text-base font-bold mt-2 mb-1; }
+.prose-coach p  { @apply mb-2 leading-relaxed; }
+.prose-coach ul { @apply list-disc ml-6 mb-2; }
+.prose-coach ol { @apply list-decimal ml-6 mb-2; }
+.prose-coach strong { @apply font-semibold; }
