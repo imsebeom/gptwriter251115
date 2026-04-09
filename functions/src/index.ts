@@ -490,65 +490,64 @@ async function handleSeedTest(_req: any, res: any, user: AuthedUser) {
   }
   const db = getFirestore();
 
-  // 1) Ensure the shared test class exists.
-  const classRef = db.doc(`classes/${TEST_CLASS_ID}`);
+  // Per-session personal sandbox class. Each anonymous test user gets a
+  // fresh class keyed on their uid so writings from different test users
+  // are fully isolated. The shared `test-class` still exists separately as
+  // the read-only demo showcase (10 demo students, 40 writings).
+  const personalClassId = `test-class-${user.uid}`;
+  const classRef = db.doc(`classes/${personalClassId}`);
   const classSnap = await classRef.get();
+
   if (!classSnap.exists) {
-    await classRef.set({
-      name: '테스트 클래스',
+    // First seed: create the personal sandbox class and pre-populate with
+    // fresh topics + default genres. Subsequent logins on the same anon
+    // session skip this (idempotent).
+    const batch = db.batch();
+
+    batch.set(classRef, {
+      name: '나의 테스트 샌드박스',
       teacherId: TEST_TEACHER_ID,
-      inviteCode: 'TESTCODE',
+      inviteCode: 'SANDBOX',
       createdAt: FieldValue.serverTimestamp(),
     });
-  }
 
-  // 2) Ensure seeded test topics exist (idempotent).
-  const topicRef = db.doc(`topics/${TEST_TOPIC_ID}`);
-  const topicSnap = await topicRef.get();
-  if (!topicSnap.exists) {
-    await topicRef.set({
+    // Two test-assignment topics.
+    batch.set(db.collection('topics').doc(), {
       name: '테스트 과제: 내가 좋아하는 것 소개하기',
-      classId: TEST_CLASS_ID,
+      classId: personalClassId,
       paragraphs: 0,
       additionalPrompt: '',
       createdAt: FieldValue.serverTimestamp(),
     });
-  }
-
-  const argumentRef = db.doc(`topics/${TEST_TOPIC_ARGUMENT_ID}`);
-  const argumentSnap = await argumentRef.get();
-  if (!argumentSnap.exists) {
-    await argumentRef.set({
+    batch.set(db.collection('topics').doc(), {
       name: '테스트 과제: 3문단 논설문 — 우리 반 규칙 제안',
-      classId: TEST_CLASS_ID,
+      classId: personalClassId,
       paragraphs: 3,
       additionalPrompt:
         '이 글은 3문단 논설문입니다. 1문단: 주장, 2문단: 이유와 근거, 3문단: 마무리(다시 주장 강조) 구성으로 평가해주세요.',
       createdAt: FieldValue.serverTimestamp(),
     });
-  }
 
-  // 2b) Seed the default 3 genres into the test class.
-  for (const g of DEFAULT_GENRES) {
-    const gRef = db.doc(`genres/${g.id}`);
-    const gSnap = await gRef.get();
-    if (!gSnap.exists) {
-      await gRef.set({
+    // Default 3 genres.
+    for (const g of DEFAULT_GENRES) {
+      batch.set(db.collection('genres').doc(), {
         name: g.name,
-        classId: TEST_CLASS_ID,
+        classId: personalClassId,
         paragraphs: g.paragraphs,
         additionalPrompt: g.additionalPrompt,
         createdAt: FieldValue.serverTimestamp(),
       });
     }
+
+    await batch.commit();
   }
 
-  // 3) Write the test user's profile, auto-joined to the test class.
+  // Write the user profile into the personal sandbox.
   await db.doc(`users/${user.uid}`).set(
     {
       name: '테스트 사용자',
       userType: 'test',
-      classId: TEST_CLASS_ID,
+      classId: personalClassId,
       teacherId: TEST_TEACHER_ID,
       createdAt: FieldValue.serverTimestamp(),
       lastLoginAt: FieldValue.serverTimestamp(),
@@ -556,5 +555,5 @@ async function handleSeedTest(_req: any, res: any, user: AuthedUser) {
     { merge: true },
   );
 
-  res.json({ ok: true, classId: TEST_CLASS_ID });
+  res.json({ ok: true, classId: personalClassId });
 }

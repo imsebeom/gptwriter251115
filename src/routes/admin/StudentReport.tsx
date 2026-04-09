@@ -51,9 +51,13 @@ export default function StudentReport() {
   useEffect(() => {
     if (!profile) return;
     if (profile.userType === 'test') {
-      setClasses([
-        { id: 'test-class', name: '테스트 클래스', teacherId: 'system', inviteCode: 'TESTCODE' },
-      ]);
+      const list: ClassRoom[] = [];
+      if (profile.classId) {
+        list.push({ id: profile.classId, name: '나의 샌드박스', teacherId: 'system', inviteCode: 'SANDBOX' });
+      }
+      list.push({ id: 'test-class', name: '테스트 클래스 (데모 10명)', teacherId: 'system', inviteCode: 'DEMO' });
+      setClasses(list);
+      // Default to the demo class so the showcase stats are visible first.
       setSelectedClassId('test-class');
       return;
     }
