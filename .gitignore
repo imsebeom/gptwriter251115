@@ -3,6 +3,7 @@ dist
 .env
 .env.local
 .firebase
+.firebaserc
 firebase-debug.log
 functions/node_modules
 functions/lib

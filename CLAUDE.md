@@ -1,14 +1,13 @@
 # GetWriter — 작업 기록
 
-원본 [imsebeom/gptwriter251115](https://github.com/imsebeom/gptwriter251115)을 Vite+React+TS+Firebase+OpenAI gpt-5-nano 로 재구현한 버전.
+초등 5학년 글쓰기 교육용 웹앱. Vite+React+TS+Firebase+OpenAI gpt-5-nano 스택.
 
 ## 스택
 
 - **프론트**: Vite · React 18 · TypeScript · Tailwind v4 · React Router v6 · Chart.js(react-chartjs-2) · jsPDF
 - **백엔드**: Firebase Hosting · Firestore · Firebase Auth · Cloud Functions v2 (Node 20)
 - **AI**: OpenAI `gpt-5-nano` (Functions 프록시, `reasoning_effort: 'minimal'`)
-- **배포**: 프로젝트 `gptwriter-edu` (Blaze, Seoul asia-northeast3)
-- **URL**: https://gptwriter-edu.web.app
+- **배포**: Firebase 프로젝트 (Blaze 요금제, Seoul asia-northeast3 리전). 실제 프로젝트 ID는 `.firebaserc`·`.env.local` 참조.
 
 ## 주요 구조
 
@@ -24,7 +23,7 @@ getwriter/
 │   ├── components/        # Layout, Icon
 │   └── lib/               # firebase, auth, authContext, firestore, classes, coach, pdf, markdown, types
 ├── functions/src/index.ts # /api/{coach,chat,progress-report,join-class,seed-test}
-└── _reference/            # 원본 저장소 + 시드/유틸 스크립트 (gitignored)
+└── _reference/            # 시드/유틸 스크립트, 로컬 실험 (gitignored)
 ```
 
 ## 기능
@@ -143,17 +142,6 @@ content: string
 - `seed-default-genres.py` — 테스트 클래스에 기본 장르 3개 시드 (`seed-test` 함수 배포 전 수동 시딩용)
 - `fix-topic.json` — 초기 REST 시딩 시 Windows 셸 UTF-8 문제로 깨진 문서를 파일 기반 PATCH로 수정한 흔적
 
-## 원본과 다른 점
-- **AI 모델**: Gemini → gpt-5-nano (Functions 프록시)
-- **학생 인증**: 이메일/SHA-256 → Google + 초대코드 (sessions 컬렉션 제거)
-- **테스트 사용자**: 이름 입력 → 1클릭 + 자동 샌드박스 (테스트 클래스 + 과제 + 장르 + 프로필)
-- **주제/장르가 클래스 스코프**: 원본은 전역, 현재는 `classId` 필드로 격리
-- **문단 수가 에디터 UI 제어**: 교사가 topics/genres에 `paragraphs` 설정 → 학생 에디터가 N개 textarea 또는 단일 textarea로 렌더
-- **기본 장르 3종 자동 시딩** (원본에 없음)
-- **성장 추적 꺾은선 차트** (원본은 막대)
-- **커스텀 아이콘** (원본은 이모지/Tailwind CDN)
-- **Firestore 규칙 강화** (원본은 사실상 무규칙)
-
 ## 주요 의사결정 메모
 
 - **Firebase Hosting + Functions**: 사용자 요구사항. Spark 불가 → Blaze 전제.
@@ -163,7 +151,7 @@ content: string
 - **LibreOffice/jsPDF 한글**: jsPDF 기본 폰트는 한글 글리프 제한이 있어 포트폴리오 PDF에서 일부 문자가 깨질 수 있음. 이슈 발생 시 Noto Sans KR 임베딩 필요 (아직 미적용).
 - **`diff().hasOnly()` 가드**: writings의 타인 업데이트를 likes/comments만 허용하는 핵심. 다른 필드 수정은 차단.
 - **치환 변수 정책**: `{title}`, `{content}`, `{topicOrGenre}` 세 변수 모두 Functions에서 치환 지원하지만, **기본 프롬프트에는 `{topicOrGenre}`만** 사용. 제목/본문은 이미 user 메시지 템플릿(`이 글은 '...' 주제로 쓴 글입니다 --- 제목: ... 내용: ... ---`)에 자동 포함되므로 system 프롬프트에 또 박으면 중복 전송 + 토큰 낭비. 교사가 커스텀 프롬프트에서 `{title}`/`{content}`를 쓰고 싶으면 그때만 사용하는 opt-in 방식.
-- **문단 수 지표 폐기**: 원본 저장소를 따라 지표로 썼으나, 교사가 과제로 강제하는 값이라 성장 추적에서 매번 100% 고정 → 무의미. gpt-5-nano 기반 `grammarScore`(0~100)로 교체. 비용 trade-off: 저장당 소액 OpenAI 호출 1회 추가.
+- **문단 수 지표 폐기**: 교사가 과제로 강제하는 값이라 성장 추적에서 매번 100% 고정 → 무의미. gpt-5-nano 기반 `grammarScore`(0~100)로 교체. 비용 trade-off: 저장당 소액 OpenAI 호출 1회 추가.
 - **AI 발전 리포트 템플릿 강제**: 초기 프롬프트가 "마크다운 형식"만 요구 → 모델이 볼드/평문으로 소제목을 출력 → 계층이 납작해짐. 해결: 시스템 프롬프트에 `## / ###` 템플릿을 코드블록으로 박아 복사하도록 유도 + 볼드 대체 금지 명시. `mdToHtml`에 `h4` 지원 추가, `.prose-coach` CSS로 h1 border, h2 파란색 등 시각 계층 강조.
 - **한국어 자연정렬**: 학생 명단·작가 필터 등 모든 이름 정렬에 `localeCompare('ko', { numeric: true })` 사용 → 데모학생1 → 10 순서. 기본 `.sort()`는 "데모학생10"이 "데모학생2"보다 먼저 옴.
 - **데모 시드 성장 진행**: 초기 시드에서 `random.choice`로 템플릿을 뽑아 성장 순서가 섞였음. 해결: 각 학생이 뽑은 4편을 content 길이 오름차순 정렬해 오래된 글 → 최근 글 순서로 배치. `grammarScore`도 티어 내에서 선형 증가(작은 지터 포함). 결과적으로 레이더의 최근 글(파란 실선)이 첫 글(회색 점선)보다 넉넉히 바깥에 위치.
@@ -186,17 +174,17 @@ npm run dev
 npm run build
 
 # 배포 (hosting+functions+firestore rules/indexes)
-firebase deploy --project gptwriter-edu
+firebase deploy --project $PROJECT_ID
 
 # 일부만
-firebase deploy --only hosting --project gptwriter-edu
-firebase deploy --only functions --project gptwriter-edu
-firebase deploy --only firestore:rules --project gptwriter-edu
+firebase deploy --only hosting --project $PROJECT_ID
+firebase deploy --only functions --project $PROJECT_ID
+firebase deploy --only firestore:rules --project $PROJECT_ID
 
 # Functions secret 등록 (최초 1회)
-firebase functions:secrets:set OPENAI_API_KEY --project gptwriter-edu
+firebase functions:secrets:set OPENAI_API_KEY --project $PROJECT_ID
 
 # 로그
-firebase functions:log --project gptwriter-edu --only api
-gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=api AND severity>=WARNING' --limit=20 --project=gptwriter-edu --format=json
+firebase functions:log --project $PROJECT_ID --only api
+gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=api AND severity>=WARNING' --limit=20 --project=$PROJECT_ID --format=json
 ```
