@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Line } from 'react-chartjs-2';
+import { Line, Radar } from 'react-chartjs-2';
 import {
   BarElement,
   CategoryScale,
@@ -9,6 +9,7 @@ import {
   LinearScale,
   LineElement,
   PointElement,
+  RadialLinearScale,
   Title,
   Tooltip,
 } from 'chart.js';
@@ -25,6 +26,7 @@ ChartJS.register(
   BarElement,
   LineElement,
   PointElement,
+  RadialLinearScale,
   Filler,
   Title,
   Tooltip,
@@ -252,18 +254,76 @@ function StudentDetail({
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow p-3">
-        <h4 className="font-semibold text-sm mb-1">성장 추적 (정규화 지표)</h4>
-        <p className="text-xs text-slate-500 mb-2">
-          각 지표를 학생의 최댓값 기준 100%로 정규화해 같은 축에 겹쳐서 보여줍니다.
-        </p>
-        <Line
-          data={normalized}
-          options={{
-            ...commonOpts,
-            scales: { y: { beginAtZero: true, max: 110, ticks: { callback: (v) => `${v}%` } } },
-          }}
-        />
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl shadow p-3">
+          <h4 className="font-semibold text-sm mb-1">현재 상태 (4축 다이어그램)</h4>
+          <p className="text-xs text-slate-500 mb-2">
+            가장 최근 글의 4가지 지표를 학생의 최댓값 대비 %로 표시합니다. (회색 점선은 첫 글)
+          </p>
+          <Radar
+            data={{
+              labels: ['글 길이', '어휘 다양성', '평균 문장 길이', '문단 수'],
+              datasets: [
+                {
+                  label: '최근 글',
+                  data: [
+                    Math.round(((lengths.at(-1) ?? 0) / maxLen) * 100),
+                    Math.round(((vocab.at(-1) ?? 0) / maxVocab) * 100),
+                    Math.round(((sentenceAvg.at(-1) ?? 0) / maxSent) * 100),
+                    Math.round(((paragraphCounts.at(-1) ?? 0) / maxPara) * 100),
+                  ],
+                  borderColor: '#2563eb',
+                  backgroundColor: '#2563eb33',
+                  pointBackgroundColor: '#2563eb',
+                  borderWidth: 2,
+                },
+                ...(summary.writings.length >= 2
+                  ? [
+                      {
+                        label: '첫 글',
+                        data: [
+                          Math.round(((lengths[0] ?? 0) / maxLen) * 100),
+                          Math.round(((vocab[0] ?? 0) / maxVocab) * 100),
+                          Math.round(((sentenceAvg[0] ?? 0) / maxSent) * 100),
+                          Math.round(((paragraphCounts[0] ?? 0) / maxPara) * 100),
+                        ],
+                        borderColor: '#94a3b8',
+                        backgroundColor: '#94a3b822',
+                        pointBackgroundColor: '#94a3b8',
+                        borderWidth: 2,
+                        borderDash: [4, 4],
+                      },
+                    ]
+                  : []),
+              ],
+            }}
+            options={{
+              responsive: true,
+              scales: {
+                r: {
+                  suggestedMin: 0,
+                  suggestedMax: 100,
+                  ticks: { display: false },
+                  pointLabels: { font: { size: 12 } },
+                },
+              },
+              plugins: { legend: { position: 'bottom' } },
+            }}
+          />
+        </div>
+        <div className="bg-white rounded-xl shadow p-3">
+          <h4 className="font-semibold text-sm mb-1">성장 추적 (정규화 지표)</h4>
+          <p className="text-xs text-slate-500 mb-2">
+            각 지표를 학생의 최댓값 기준 100%로 정규화해 같은 축에 겹쳐서 보여줍니다.
+          </p>
+          <Line
+            data={normalized}
+            options={{
+              ...commonOpts,
+              scales: { y: { beginAtZero: true, max: 110, ticks: { callback: (v) => `${v}%` } } },
+            }}
+          />
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
