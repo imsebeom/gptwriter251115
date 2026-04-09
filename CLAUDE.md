@@ -22,7 +22,7 @@ getwriter/
 │   │   └── admin/         # Classes, Submissions, TopicsGenres, PromptEditor, StudentReport
 │   ├── components/        # Layout, Icon
 │   └── lib/               # firebase, auth, authContext, firestore, classes, coach, pdf, markdown, types
-├── functions/src/index.ts # /api/{coach,chat,progress-report,join-class,seed-test}
+├── functions/src/index.ts # /api/{coach,chat,progress-report,grammar-score,join-class,seed-test}
 └── _reference/            # 시드/유틸 스크립트, 로컬 실험 (gitignored)
 ```
 
@@ -31,7 +31,7 @@ getwriter/
 ### 인증 (3가지)
 1. **학생**: Google OAuth → 첫 로그인이면 `/join-class`로 자동 이동, 초대코드 입력 → `/api/join-class`가 검증·프로필 생성
 2. **교사**: Google OAuth → 클라이언트에서 `ensureTeacherProfile`로 `users/{uid}` 생성
-3. **테스트**: 1클릭 익명 로그인 → `/api/seed-test`가 idempotent하게 테스트 클래스·과제·장르·프로필 자동 생성
+3. **테스트**: 1클릭 익명 로그인 → `/api/seed-test`가 **세션별 개인 샌드박스**(`classes/test-class-{uid}`)를 생성하고 그 안에 기본 장르 3종 + 테스트 과제 2종을 fresh 시딩. 사용자 프로필 `classId`는 개인 샌드박스를 가리킴 → 여러 테스트 사용자의 데이터가 서로 누적되지 않음. 공유 `test-class` (데모학생 10명 + 40편)는 읽기 쇼케이스로 그대로 유지.
 
 `signInWithGoogle`은 `prompt: 'select_account'`로 매번 계정 선택 강제. 로그아웃 시 Firebase Auth 세션 + `getwriter:` 접두사 localStorage 키 정리.
 
@@ -155,6 +155,8 @@ content: string
 - **AI 발전 리포트 템플릿 강제**: 초기 프롬프트가 "마크다운 형식"만 요구 → 모델이 볼드/평문으로 소제목을 출력 → 계층이 납작해짐. 해결: 시스템 프롬프트에 `## / ###` 템플릿을 코드블록으로 박아 복사하도록 유도 + 볼드 대체 금지 명시. `mdToHtml`에 `h4` 지원 추가, `.prose-coach` CSS로 h1 border, h2 파란색 등 시각 계층 강조.
 - **한국어 자연정렬**: 학생 명단·작가 필터 등 모든 이름 정렬에 `localeCompare('ko', { numeric: true })` 사용 → 데모학생1 → 10 순서. 기본 `.sort()`는 "데모학생10"이 "데모학생2"보다 먼저 옴.
 - **데모 시드 성장 진행**: 초기 시드에서 `random.choice`로 템플릿을 뽑아 성장 순서가 섞였음. 해결: 각 학생이 뽑은 4편을 content 길이 오름차순 정렬해 오래된 글 → 최근 글 순서로 배치. `grammarScore`도 티어 내에서 선형 증가(작은 지터 포함). 결과적으로 레이더의 최근 글(파란 실선)이 첫 글(회색 점선)보다 넉넉히 바깥에 위치.
+- **테스트 사용자 격리**: 초기에는 모든 테스트 사용자가 공유 `test-class`에 쓰기 → 이 사람 저 사람 글이 섞임. 해결: 각 anon uid마다 `classes/test-class-{uid}` 개인 샌드박스를 만들고 기본 장르 3종·테스트 과제 2종 fresh 시딩. 사용자 프로필의 `classId`는 개인 샌드박스를 가리킴 → Write/Gallery가 자동으로 자기 것만 봄. 공유 `test-class`는 데모학생 10명 쇼케이스로 그대로 두고, 관리자 탭(TopicsGenres/Submissions/StudentReport)은 테스트 사용자에게 드롭다운으로 "나의 샌드박스 + 테스트 클래스(데모)" 양쪽 선택권 제공, Submissions/StudentReport는 기본값으로 데모 선택.
+- **외부 노출 정보 스크러빙**: 리포 공개 기준으로 호스팅 URL·프로젝트 ID·원본 저장소 언급을 README/CLAUDE에서 전면 제거. `.firebaserc`는 gitignore로 전환하고 `.firebaserc.example` 템플릿만 남김. 이미 push된 과거 커밋의 히스토리는 재작성하지 않음(공개된 마당에 무의미) — 새 커밋부터 클린 유지.
 
 ## 미완·향후 TODO
 
