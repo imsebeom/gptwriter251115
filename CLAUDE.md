@@ -154,6 +154,7 @@ content: string
 - **Icon은 SVG 대신 PNG**: Gemini가 SVG를 안정적으로 내보내지 못함. PNG + invert 트릭으로 다크/라이트 모두 대응.
 - **LibreOffice/jsPDF 한글**: jsPDF 기본 폰트는 한글 글리프 제한이 있어 포트폴리오 PDF에서 일부 문자가 깨질 수 있음. 이슈 발생 시 Noto Sans KR 임베딩 필요 (아직 미적용).
 - **`diff().hasOnly()` 가드**: writings의 타인 업데이트를 likes/comments만 허용하는 핵심. 다른 필드 수정은 차단.
+- **치환 변수 정책**: `{title}`, `{content}`, `{topicOrGenre}` 세 변수 모두 Functions에서 치환 지원하지만, **기본 프롬프트에는 `{topicOrGenre}`만** 사용. 제목/본문은 이미 user 메시지 템플릿(`이 글은 '...' 주제로 쓴 글입니다 --- 제목: ... 내용: ... ---`)에 자동 포함되므로 system 프롬프트에 또 박으면 중복 전송 + 토큰 낭비. 교사가 커스텀 프롬프트에서 `{title}`/`{content}`를 쓰고 싶으면 그때만 사용하는 opt-in 방식.
 
 ## 미완·향후 TODO
 
