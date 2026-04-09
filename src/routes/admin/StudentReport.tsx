@@ -89,7 +89,11 @@ export default function StudentReport() {
         return da - db;
       });
     }
-    return Array.from(map.values());
+    // Sort the student list itself by name. `ko` locale + numeric option so
+    // '데모학생2' comes before '데모학생10'.
+    return Array.from(map.values()).sort((a, b) =>
+      a.userName.localeCompare(b.userName, 'ko', { numeric: true }),
+    );
   }, [writings]);
 
   // Class baseline: for each metric, take each student's personal max and

@@ -53,7 +53,9 @@ export default function Submissions() {
       if (!map.has(w.userId)) map.set(w.userId, { userId: w.userId, userName: w.userName, writings: [] });
       map.get(w.userId)!.writings.push(w);
     }
-    return Array.from(map.values()).sort((a, b) => a.userName.localeCompare(b.userName));
+    return Array.from(map.values()).sort((a, b) =>
+      a.userName.localeCompare(b.userName, 'ko', { numeric: true }),
+    );
   }, [writings]);
 
   const downloadAll = () => {
