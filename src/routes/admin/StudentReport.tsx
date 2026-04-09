@@ -92,6 +92,44 @@ export default function StudentReport() {
     return Array.from(map.values());
   }, [writings]);
 
+  // Class baseline: for each metric, take each student's personal max and
+  // average those maxes across students. This gives "a typical classmate's
+  // best" as the 100% reference for the current-state radar.
+  const classAvgMax = useMemo(() => {
+    if (groups.length === 0) return { length: 1, vocab: 1, sentence: 1, paragraphs: 1 };
+    let sumLen = 0;
+    let sumVocab = 0;
+    let sumSent = 0;
+    let sumPara = 0;
+    for (const g of groups) {
+      let ml = 0,
+        mv = 0,
+        ms = 0,
+        mp = 0;
+      for (const w of g.writings) {
+        const len = w.content.length;
+        const voc = new Set(w.content.split(/\s+/).filter(Boolean)).size;
+        const sentences = w.content.split(/[.!?。]/).filter((s) => s.trim().length > 0);
+        const sentAvg = sentences.length ? Math.round(w.content.length / sentences.length) : 0;
+        const para = w.content.split(/\n{2,}/).filter(Boolean).length;
+        if (len > ml) ml = len;
+        if (voc > mv) mv = voc;
+        if (sentAvg > ms) ms = sentAvg;
+        if (para > mp) mp = para;
+      }
+      sumLen += ml;
+      sumVocab += mv;
+      sumSent += ms;
+      sumPara += mp;
+    }
+    return {
+      length: Math.max(1, sumLen / groups.length),
+      vocab: Math.max(1, sumVocab / groups.length),
+      sentence: Math.max(1, sumSent / groups.length),
+      paragraphs: Math.max(1, sumPara / groups.length),
+    };
+  }, [groups]);
+
   const generate = async () => {
     if (!selected) return;
     setBusy(true);
@@ -153,7 +191,13 @@ export default function StudentReport() {
         </aside>
         <main>
           {selected ? (
-            <StudentDetail summary={selected} report={report} busy={busy} onGenerate={generate} />
+            <StudentDetail
+              summary={selected}
+              classAvgMax={classAvgMax}
+              report={report}
+              busy={busy}
+              onGenerate={generate}
+            />
           ) : (
             <div className="text-slate-500 p-6">왼쪽에서 학생을 선택하세요.</div>
           )}
@@ -165,11 +209,13 @@ export default function StudentReport() {
 
 function StudentDetail({
   summary,
+  classAvgMax,
   report,
   busy,
   onGenerate,
 }: {
   summary: Summary;
+  classAvgMax: { length: number; vocab: number; sentence: number; paragraphs: number };
   report: string | null;
   busy: boolean;
   onGenerate: () => void;
@@ -258,7 +304,8 @@ function StudentDetail({
         <div className="bg-white rounded-xl shadow p-3">
           <h4 className="font-semibold text-sm mb-1">현재 상태 (4축 다이어그램)</h4>
           <p className="text-xs text-slate-500 mb-2">
-            가장 최근 글의 4가지 지표를 학생의 최댓값 대비 %로 표시합니다. (회색 점선은 첫 글)
+            가장 최근 글의 4가지 지표를 <b>클래스 학생들의 개인 최댓값 평균</b>(=100%) 기준으로 표시합니다. 회색
+            점선은 첫 글. 100%를 넘으면 또래 평균보다 앞섰다는 뜻입니다.
           </p>
           <Radar
             data={{
@@ -267,10 +314,10 @@ function StudentDetail({
                 {
                   label: '최근 글',
                   data: [
-                    Math.round(((lengths.at(-1) ?? 0) / maxLen) * 100),
-                    Math.round(((vocab.at(-1) ?? 0) / maxVocab) * 100),
-                    Math.round(((sentenceAvg.at(-1) ?? 0) / maxSent) * 100),
-                    Math.round(((paragraphCounts.at(-1) ?? 0) / maxPara) * 100),
+                    Math.round(((lengths.at(-1) ?? 0) / classAvgMax.length) * 100),
+                    Math.round(((vocab.at(-1) ?? 0) / classAvgMax.vocab) * 100),
+                    Math.round(((sentenceAvg.at(-1) ?? 0) / classAvgMax.sentence) * 100),
+                    Math.round(((paragraphCounts.at(-1) ?? 0) / classAvgMax.paragraphs) * 100),
                   ],
                   borderColor: '#2563eb',
                   backgroundColor: '#2563eb33',
@@ -282,10 +329,10 @@ function StudentDetail({
                       {
                         label: '첫 글',
                         data: [
-                          Math.round(((lengths[0] ?? 0) / maxLen) * 100),
-                          Math.round(((vocab[0] ?? 0) / maxVocab) * 100),
-                          Math.round(((sentenceAvg[0] ?? 0) / maxSent) * 100),
-                          Math.round(((paragraphCounts[0] ?? 0) / maxPara) * 100),
+                          Math.round(((lengths[0] ?? 0) / classAvgMax.length) * 100),
+                          Math.round(((vocab[0] ?? 0) / classAvgMax.vocab) * 100),
+                          Math.round(((sentenceAvg[0] ?? 0) / classAvgMax.sentence) * 100),
+                          Math.round(((paragraphCounts[0] ?? 0) / classAvgMax.paragraphs) * 100),
                         ],
                         borderColor: '#94a3b8',
                         backgroundColor: '#94a3b822',
@@ -302,7 +349,7 @@ function StudentDetail({
               scales: {
                 r: {
                   suggestedMin: 0,
-                  suggestedMax: 100,
+                  suggestedMax: 120,
                   ticks: { display: false },
                   pointLabels: { font: { size: 12 } },
                 },
