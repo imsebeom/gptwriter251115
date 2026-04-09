@@ -41,8 +41,20 @@ export default function Gallery() {
     }
   }, [profile]);
 
-  const authors = useMemo(() => Array.from(new Set(items.map((w) => w.userName))).sort(), [items]);
-  const categories = useMemo(() => Array.from(new Set(items.map((w) => w.topicOrGenre))).sort(), [items]);
+  const authors = useMemo(
+    () =>
+      Array.from(new Set(items.map((w) => w.userName))).sort((a, b) =>
+        a.localeCompare(b, 'ko', { numeric: true }),
+      ),
+    [items],
+  );
+  const categories = useMemo(
+    () =>
+      Array.from(new Set(items.map((w) => w.topicOrGenre))).sort((a, b) =>
+        a.localeCompare(b, 'ko', { numeric: true }),
+      ),
+    [items],
+  );
 
   const filtered = useMemo(() => {
     let list = items;
