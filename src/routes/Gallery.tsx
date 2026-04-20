@@ -7,7 +7,7 @@ import {
   toggleLike,
 } from '../lib/firestore';
 import { listTeacherClasses } from '../lib/classes';
-import type { Writing } from '../lib/types';
+import { TEST_CLASS_ID, type Writing } from '../lib/types';
 import Icon from '../components/Icon';
 
 type SortKey = 'latest' | 'likes' | 'comments';
@@ -34,6 +34,11 @@ export default function Gallery() {
         active = false;
         if (unsub) unsub();
       };
+    } else if (profile.userType === 'test' && profile.classId) {
+      const ids = profile.classId === TEST_CLASS_ID
+        ? [TEST_CLASS_ID]
+        : [profile.classId, TEST_CLASS_ID];
+      return subscribeWritingsByClasses(ids, setItems);
     } else if (profile.classId) {
       return subscribeWritings(profile.classId, setItems);
     } else {
